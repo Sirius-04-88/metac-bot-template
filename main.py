@@ -716,14 +716,13 @@ if __name__ == "__main__":
         extra_metadata_in_explanation=True,
         llms={
             "default": GeneralLlm(
-                model="gemini/gemini-2.5-pro",
-                temperature=0.3,
+                model="gemini/gemini-3.5-flash-lite",  # fork: 2.5-pro 404s for new keys; 3.5 Flash Lite = free tier, 500 req/day
                 timeout=120,
                 allowed_tries=2,
             ),
-            "summarizer": "gemini/gemini-2.5-flash",
+            "summarizer": "gemini/gemini-3.5-flash-lite",
             "researcher": "no_research",  # no search: saves free-tier calls
-            "parser": "gemini/gemini-2.5-flash",
+            "parser": "gemini/gemini-3.5-flash-lite",
         },
     )
 
