@@ -126,9 +126,24 @@ class FallTemplateBot2026(ForecastBot):
     _concurrency_limiter = asyncio.Semaphore(_max_concurrent_questions)
     _structure_output_validation_samples = 2
 
+    # Fork: Gemini free tier allows 15 requests/min per model (Test Bot run 2, 2026-11-22: HTTP 429).
+    # One question costs ~3-6 calls (forecast + 2 parser samples + retries), so start at most one
+    # question every 40 s (<= ~9 calls/min). Questions already forecasted are skipped before this.
+    _min_seconds_between_questions = 40.0
+    _last_question_start = 0.0  # reserved start time (monotonic); no Lock: main() calls asyncio.run twice
+
+    async def _wait_for_question_slot(self) -> None:
+        loop = asyncio.get_running_loop()
+        now = loop.time()
+        start = max(now, type(self)._last_question_start + self._min_seconds_between_questions)
+        type(self)._last_question_start = start  # no await between read and write
+        if start > now:
+            await asyncio.sleep(start - now)
+
     ##################################### RESEARCH #####################################
 
     async def run_research(self, question: MetaculusQuestion) -> str:
+        await self._wait_for_question_slot()
         async with self._concurrency_limiter:
             research = ""
             researcher = self.get_llm("researcher")
