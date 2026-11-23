@@ -755,6 +755,12 @@ if __name__ == "__main__":
     # summary printers below.
     client = MetaculusClient()
     if run_mode == "tournament":
+        try:  # read-only diagnostic (counts only); never breaks the run
+            from diag_tournament import run_diag
+
+            run_diag(client.CURRENT_AI_COMPETITION_ID)
+        except Exception as _e:
+            print(f"[diag] skipped: {type(_e).__name__}")
         seasonal_tournament_reports = asyncio.run(
             template_bot.forecast_on_tournament(
                 client.CURRENT_AI_COMPETITION_ID, return_exceptions=True
