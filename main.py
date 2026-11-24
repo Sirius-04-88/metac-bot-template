@@ -1,6 +1,7 @@
 import argparse
 import asyncio
 import logging
+import re
 from datetime import datetime, timezone
 from typing import Literal
 
@@ -43,6 +44,32 @@ from forecasting_tools import (
 
 dotenv.load_dotenv()
 logger = logging.getLogger(__name__)
+
+
+_GEMINI_FALLBACK_MODELS = ["gemini/gemini-3.6-flash", "gemini/gemini-3.8-flash"]  # fork: free tier ~20 req/day each; IDs unverified -> a 404 just moves on to the next
+
+
+class FallbackGeneralLlm(GeneralLlm):
+    """Fork: on a Gemini 503/UNAVAILABLE from the default model, retry ONCE per fallback model
+    (in order), logging which one answered. Any other error is re-raised unchanged."""
+
+    async def invoke(self, *args, **kwargs):
+        try:
+            return await super().invoke(*args, **kwargs)
+        except Exception as first_error:  # noqa: BLE001
+            text = str(first_error)
+            if "503" not in text and "UNAVAILABLE" not in text:
+                raise
+            logger.warning("[fallback] primary model 503; trying fallbacks")
+            for alt in _GEMINI_FALLBACK_MODELS:
+                try:
+                    result = await GeneralLlm(model=alt, timeout=120, allowed_tries=1).invoke(*args, **kwargs)
+                    print(f"[fallback] answered by {alt}")
+                    return result
+                except Exception as alt_error:  # noqa: BLE001
+                    msg = re.sub(r"key=[^&\s\"']+", "key=***", str(alt_error))[:160]
+                    print(f"[fallback] {alt} failed: {type(alt_error).__name__}: {msg}")
+            raise first_error
 
 
 class FallTemplateBot2026(ForecastBot):
@@ -730,7 +757,7 @@ if __name__ == "__main__":
         skip_previously_forecasted_questions=True,
         extra_metadata_in_explanation=True,
         llms={
-            "default": GeneralLlm(
+            "default": FallbackGeneralLlm(
                 model="gemini/gemini-3.5-flash-lite",  # fork: 2.5-pro 404s for new keys; 3.5 Flash Lite = free tier, 500 req/day
                 timeout=120,
                 allowed_tries=2,
